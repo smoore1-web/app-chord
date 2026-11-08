@@ -11,8 +11,18 @@ android {
         applicationId = "com.stm.chordear"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1"
+    }
+
+    // fixed key so each new APK installs as an update over the last one
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file("chordear.keystore")
+            storePassword = "chordear"
+            keyAlias = "chordear"
+            keyPassword = "chordear"
+        }
     }
 
     buildTypes {
