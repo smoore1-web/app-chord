@@ -102,6 +102,8 @@ class ChordEngine(private val listener: Listener, private val makeRecord: () -> 
     val spectra = ArrayList<FloatArray>()
     val levels = ArrayList<Float>()
     val storeBins: Int
+    /** Raw audio of this listen (16-bit mono), so the clip can be saved for checking. */
+    val pcm = java.io.ByteArrayOutputStream(ChordEngine.SR * 2 * 22)
 
     init {
         val levelsN = Integer.numberOfTrailingZeros(N)
@@ -186,6 +188,9 @@ class ChordEngine(private val listener: Listener, private val makeRecord: () -> 
                 for (i in 0 until HOP) {
                     val s = buf[i] / 32768f
                     ring[N - HOP + i] = s; e += s * s
+                }
+                synchronized(pcm) {
+                    for (i in 0 until HOP) { val w = buf[i].toInt(); pcm.write(w and 0xFF); pcm.write((w shr 8) and 0xFF) }
                 }
                 val level = sqrt(e / HOP).toFloat()
                 val t = hops * HOP.toDouble() / SR

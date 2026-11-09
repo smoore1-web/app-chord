@@ -11,8 +11,8 @@ android {
         applicationId = "com.stm.chordear"
         minSdk = 26
         targetSdk = 34
-        versionCode = 2
-        versionName = "1.1"
+        versionCode = 3
+        versionName = "1.2"
     }
 
     // fixed key so each new APK installs as an update over the last one

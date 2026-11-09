@@ -111,6 +111,8 @@ object Analyzer {
                 if (cm > 0f) for (i in 0 until 12) profile[i] += chroma[t][i] / cm
             }
         }
+        val bassProfile = FloatArray(12)
+        for (t in 0 until T) if (levels[t] > 0.08f * maxLevel) for (i in 0 until 12) bassProfile[i] += bn[t][i]
         val key = Music.detectKeyFromProfile(profile)
 
         // ---- 4. templates with a gentle key prior ----
@@ -183,6 +185,37 @@ object Analyzer {
         }
         val chords = fin.filter { it.chord != null }
         if (chords.none { it.duration >= 0.5 }) return null
-        return ChordResult(key, Music.mainProgression(chords), chords, System.currentTimeMillis())
+        val prog = Music.mainProgression(chords)
+        val finalKey = if (key != null) resolveRelative(key, chords, bassProfile, prog) else null
+        return ChordResult(finalKey, prog, chords, System.currentTimeMillis())
+    }
+
+    /**
+     * Major keys and their relative minors share the same notes (C major / A minor),
+     * so decide between them from where the music actually sits: time on each tonic
+     * chord, the bass, and which chord the main loop starts on.
+     */
+    private fun resolveRelative(key: Music.Key, chords: List<Segment>, bass: FloatArray, prog: List<Chord>): Music.Key {
+        val majT = if (key.minor) (key.tonic + 3) % 12 else key.tonic
+        val minT = (majT + 9) % 12
+        var total = 0.0; var dMaj = 0.0; var dMin = 0.0
+        for (s in chords) {
+            val c = s.chord ?: continue
+            total += s.duration
+            val minorQ = c.quality == 1 || c.quality == 3
+            if (c.root == majT && !minorQ && c.quality != 6) dMaj += s.duration
+            if (c.root == minT && minorQ) dMin += s.duration
+        }
+        if (total <= 0) return key
+        var bm = 0f; for (x in bass) bm = max(bm, x)
+        val bMaj = if (bm > 0) bass[majT] / bm else 0f
+        val bMin = if (bm > 0) bass[minT] / bm else 0f
+        val first = prog.firstOrNull()
+        var sMaj = dMaj / total + 0.35 * bMaj
+        var sMin = dMin / total + 0.35 * bMin
+        if (first != null && first.root == majT && first.quality != 1) sMaj += 0.15
+        if (first != null && first.root == minT && first.quality == 1) sMin += 0.15
+        if (key.minor) sMin += 0.05 else sMaj += 0.05          // slight trust in the first estimate
+        return if (sMin > sMaj) Music.Key(minT, true) else Music.Key(majT, false)
     }
 }

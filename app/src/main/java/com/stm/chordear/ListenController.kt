@@ -28,6 +28,8 @@ class ListenController(private val cb: Callback) : ChordEngine.Listener {
     companion object {
         const val MAX_SEC = 20.0
         const val MIN_SEC = 6.0
+        /** Audio from the most recent listen (16-bit mono PCM at ChordEngine.SR). */
+        @Volatile var lastClip: ByteArray? = null
     }
 
     private val main = Handler(Looper.getMainLooper())
@@ -54,6 +56,7 @@ class ListenController(private val cb: Callback) : ChordEngine.Listener {
         Thread {
             e.stop()
             val (spec, lev) = synchronized(e.spectra) { ArrayList(e.spectra) to ArrayList(e.levels) }
+            lastClip = synchronized(e.pcm) { e.pcm.toByteArray() }
             val r = try {
                 Analyzer.analyze(spec, lev, ChordEngine.SR, ChordEngine.N, ChordEngine.HOP, extended)
             } catch (ex: Exception) { null }
@@ -86,5 +89,38 @@ class ListenController(private val cb: Callback) : ChordEngine.Listener {
 
     override fun onError(message: String) {
         main.post { engine = null; cb.onError(message) }
+    }
+}
+
+/** Writes a clip to the phone's Downloads folder as a .wav file. */
+object ClipSaver {
+    fun save(ctx: Context, pcm: ByteArray): String {
+        val name = "ChordEar-clip-" + java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.US).format(java.util.Date()) + ".wav"
+        val wav = wav(pcm)
+        if (android.os.Build.VERSION.SDK_INT >= 29) {
+            val values = android.content.ContentValues().apply {
+                put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, name)
+                put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "audio/wav")
+                put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS)
+            }
+            val uri = ctx.contentResolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                ?: throw java.io.IOException("Couldn't create the file")
+            ctx.contentResolver.openOutputStream(uri)?.use { it.write(wav) } ?: throw java.io.IOException("Couldn't write the file")
+            return "Downloads/$name"
+        } else {
+            val dir = ctx.getExternalFilesDir(null) ?: ctx.filesDir
+            val f = java.io.File(dir, name); f.writeBytes(wav)
+            return f.absolutePath
+        }
+    }
+
+    private fun wav(pcm: ByteArray): ByteArray {
+        val sr = ChordEngine.SR
+        val b = java.nio.ByteBuffer.allocate(44 + pcm.size).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+        b.put("RIFF".toByteArray()); b.putInt(36 + pcm.size); b.put("WAVE".toByteArray())
+        b.put("fmt ".toByteArray()); b.putInt(16); b.putShort(1); b.putShort(1)
+        b.putInt(sr); b.putInt(sr * 2); b.putShort(2); b.putShort(16)
+        b.put("data".toByteArray()); b.putInt(pcm.size); b.put(pcm)
+        return b.array()
     }
 }

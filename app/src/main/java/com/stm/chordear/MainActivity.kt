@@ -202,6 +202,15 @@ class MainActivity : Activity(), ListenController.Callback {
             }, "Share chords"))
         }, lp(0, WRAP, 1f).apply { leftMargin = dp(8) })
         resultBox.addView(row, lp(MATCH, WRAP).apply { topMargin = dp(10) })
+        resultBox.addView(text("Wrong? Save clip to send for checking", 13f, C.MUTE).apply {
+            gravity = Gravity.CENTER; setPadding(0, dp(12), 0, dp(4))
+            setOnClickListener {
+                val clip = ListenController.lastClip
+                if (clip == null || clip.isEmpty()) { toast("No clip to save yet"); return@setOnClickListener }
+                try { toast("Saved to " + ClipSaver.save(this@MainActivity, clip)) }
+                catch (e: Exception) { toast("Couldn't save: ${e.message}") }
+            }
+        }, lp(MATCH, WRAP))
     }
 
     // ---------- service & capture permission ----------

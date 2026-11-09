@@ -72,6 +72,7 @@ fun Context.resultView(r: ChordResult): LinearLayout {
 
         addView(text("KEY", 11f, C.MUTE, true).apply { letterSpacing = 0.15f })
         addView(text(r.keyText(), 26f, C.INK, true))
+        if (r.key != null) addView(text(r.relativeText().replaceFirstChar { it.uppercase() }, 13f, C.MUTE))
 
         addView(text("CHORD PROGRESSION", 11f, C.MUTE, true).apply {
             letterSpacing = 0.15f; setPadding(0, dp(16), 0, dp(8))

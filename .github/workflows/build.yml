@@ -36,7 +36,7 @@ jobs:
       - name: Publish download
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.1.${{ github.run_number }}
-          name: ChordEar 1.1.${{ github.run_number }}
+          tag_name: v1.2.${{ github.run_number }}
+          name: ChordEar 1.2.${{ github.run_number }}
           files: ChordEar.apk
           make_latest: true

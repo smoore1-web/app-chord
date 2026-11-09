@@ -24,6 +24,8 @@ object Music {
             return majTonic in intArrayOf(5, 10, 3, 8, 1, 6)
         }
         fun name(): String = (if (flats) FLAT else SHARP)[tonic] + if (minor) " minor" else " major"
+        /** The key with the same notes: C major <-> A minor. */
+        fun relative(): Key = if (minor) Key((tonic + 3) % 12, false) else Key((tonic + 9) % 12, true)
     }
 
     fun chordName(c: Chord?, key: Key?): String {

@@ -15,11 +15,14 @@ data class ChordResult(
     val whenMillis: Long
 ) {
     fun keyText(): String = key?.name() ?: "Unknown key"
+    fun relativeText(): String = key?.let { "same notes as ${it.relative().name()}" } ?: ""
     fun progressionText(): String = progression.joinToString("  –  ") { Music.chordName(it, key) }
     fun romanText(): String = if (key == null) "" else progression.joinToString("  –  ") { Music.roman(it, key) }
     fun timelineText(): String = timeline.joinToString("  ") { Music.chordName(it.chord, key) }
     fun shareText(): String = buildString {
-        append("Key: ").append(keyText()).append('\n')
+        append("Key: ").append(keyText())
+        if (key != null) append(" (").append(relativeText()).append(')')
+        append('\n')
         append("Progression: ").append(progressionText())
         if (key != null) append("  (").append(romanText()).append(')')
         append("\nAll chords heard: ").append(timelineText())
