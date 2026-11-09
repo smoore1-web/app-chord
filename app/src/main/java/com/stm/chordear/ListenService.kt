@@ -149,6 +149,7 @@ class ListenService : Service(), ListenController.Callback {
             if (usingPhone && mp != null && Build.VERSION.SDK_INT >= 29) { { AudioSources.phone(mp) } }
             else { { AudioSources.mic(this) } }
         this.fromBubble = fromBubble
+        Synth.stop()            // don't let our own playback get captured
         removePanel()
         controller.start(maker, usingPhone, Prefs.extended(this))
         pulse?.apply { listening = true; big = false; label = "…" }

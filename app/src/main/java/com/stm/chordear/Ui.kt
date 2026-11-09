@@ -62,49 +62,155 @@ fun lp(w: Int, h: Int, weight: Float = 0f): LinearLayout.LayoutParams =
 const val MATCH = LinearLayout.LayoutParams.MATCH_PARENT
 const val WRAP = LinearLayout.LayoutParams.WRAP_CONTENT
 
-/** The result card: key, main progression chips with Roman numerals, and every chord heard. */
-fun Context.resultView(r: ChordResult): LinearLayout {
-    val ctx = this
-    return LinearLayout(ctx).apply {
-        orientation = LinearLayout.VERTICAL
-        background = rounded(C.PANEL, 20, C.LINE)
-        setPadding(dp(18), dp(18), dp(18), dp(18))
+/** The result card: key, progression, instrument view with playback, and every chord heard. */
+fun Context.resultView(r: ChordResult): LinearLayout = ResultCard(this, r)
 
-        addView(text("KEY", 11f, C.MUTE, true).apply { letterSpacing = 0.15f })
-        addView(text(r.keyText(), 26f, C.INK, true))
-        if (r.key != null) addView(text(r.relativeText().replaceFirstChar { it.uppercase() }, 13f, C.MUTE))
+class ResultCard(ctx: Context, private val r: ChordResult) : LinearLayout(ctx) {
+    private val flats = r.key?.flats == true
+    private var inst = if (Prefs.guitar(ctx)) Instrument.GUITAR else Instrument.PIANO
+    private var selected: Chord? = r.progression.firstOrNull() ?: r.timeline.firstOrNull()?.chord
+    private val progChips = ArrayList<Pair<Chord, View>>()
+    private val heardChips = ArrayList<Pair<Chord, View>>()
+    private val piano = PianoView(ctx)
+    private val guitar = GuitarView(ctx)
+    private val selName = ctx.text("", 20f, C.AMBER2, true)
+    private val selNotes = ctx.text("", 13f, C.MUTE)
+    private val pianoTab: TextView
+    private val guitarTab: TextView
+    private val playProg: TextView
+    private val playHeard: TextView
+    private var playingButton: TextView? = null
 
-        addView(text("CHORD PROGRESSION", 11f, C.MUTE, true).apply {
-            letterSpacing = 0.15f; setPadding(0, dp(16), 0, dp(8))
-        })
-        val chips = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
+    init {
+        orientation = VERTICAL
+        background = ctx.rounded(C.PANEL, 20, C.LINE)
+        setPadding(ctx.dp(18), ctx.dp(18), ctx.dp(18), ctx.dp(18))
+
+        addView(ctx.text("KEY", 11f, C.MUTE, true).apply { letterSpacing = 0.15f })
+        addView(ctx.text(r.keyText(), 26f, C.INK, true))
+        if (r.key != null) addView(ctx.text(r.relativeText().replaceFirstChar { it.uppercase() }, 13f, C.MUTE))
+
+        addView(header("CHORD PROGRESSION  ·  tap to hear"))
+        val chips = LinearLayout(ctx).apply { orientation = HORIZONTAL }
         r.progression.forEachIndexed { i, ch ->
             val chip = LinearLayout(ctx).apply {
-                orientation = LinearLayout.VERTICAL
-                gravity = Gravity.CENTER
-                background = rounded(C.PANEL2, 14, C.LINE)
-                setPadding(dp(10), dp(10), dp(10), dp(10))
-                addView(text(Music.chordName(ch, r.key), 22f, C.AMBER2, true).apply { gravity = Gravity.CENTER })
-                if (r.key != null) addView(text(Music.roman(ch, r.key), 13f, C.TEAL, true).apply { gravity = Gravity.CENTER })
+                orientation = VERTICAL; gravity = Gravity.CENTER
+                setPadding(ctx.dp(6), ctx.dp(10), ctx.dp(6), ctx.dp(10))
+                addView(ctx.text(Music.chordName(ch, r.key), if (ch.isInversion) 17f else 22f, C.AMBER2, true).apply { gravity = Gravity.CENTER })
+                if (r.key != null) addView(ctx.text(Music.roman(ch, r.key), 13f, C.TEAL, true).apply { gravity = Gravity.CENTER })
+                setOnClickListener { select(ch, play = true) }
             }
-            chips.addView(chip, lp(0, WRAP, 1f).apply { if (i > 0) leftMargin = dp(6) })
+            progChips.add(ch to chip)
+            chips.addView(chip, lp(0, WRAP, 1f).apply { if (i > 0) leftMargin = ctx.dp(6) })
         }
         addView(chips, lp(MATCH, WRAP))
 
-        addView(text("EVERYTHING IT HEARD", 11f, C.MUTE, true).apply {
-            letterSpacing = 0.15f; setPadding(0, dp(16), 0, dp(8))
-        })
-        val row = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
-        r.timeline.filter { it.duration >= 0.4 }.forEachIndexed { i, s ->
-            row.addView(text(Music.chordName(s.chord, r.key), 15f, C.INK, true).apply {
-                background = rounded(C.PANEL2, 10)
-                setPadding(dp(10), dp(6), dp(10), dp(6))
-            }, lp(WRAP, WRAP).apply { if (i > 0) leftMargin = dp(5) })
+        // instrument switch
+        val tabs = LinearLayout(ctx).apply {
+            orientation = HORIZONTAL; background = ctx.rounded(C.PANEL2, 12)
+            setPadding(ctx.dp(3), ctx.dp(3), ctx.dp(3), ctx.dp(3))
         }
-        addView(HorizontalScrollView(ctx).apply {
-            isHorizontalScrollBarEnabled = false
-            addView(row)
-        }, lp(MATCH, WRAP))
+        pianoTab = tab("Piano") { setInst(Instrument.PIANO) }
+        guitarTab = tab("Guitar") { setInst(Instrument.GUITAR) }
+        tabs.addView(pianoTab, lp(0, WRAP, 1f)); tabs.addView(guitarTab, lp(0, WRAP, 1f).apply { leftMargin = ctx.dp(3) })
+        addView(tabs, lp(MATCH, WRAP).apply { topMargin = ctx.dp(16) })
+
+        addView(selName.apply { gravity = Gravity.CENTER; setPadding(0, ctx.dp(12), 0, 0) }, lp(MATCH, WRAP))
+        addView(selNotes.apply { gravity = Gravity.CENTER; setPadding(0, 0, 0, ctx.dp(8)) }, lp(MATCH, WRAP))
+        addView(piano, lp(MATCH, WRAP))
+        addView(guitar, lp(MATCH, WRAP))
+
+        val row = LinearLayout(ctx).apply { orientation = HORIZONTAL }
+        playProg = ctx.button("▶  Progression", true) { toggle(playProgButton = true) }
+        playHeard = ctx.button("▶  As heard", false) { toggle(playProgButton = false) }
+        row.addView(playProg, lp(0, WRAP, 1f)); row.addView(playHeard, lp(0, WRAP, 1f).apply { leftMargin = ctx.dp(8) })
+        addView(row, lp(MATCH, WRAP).apply { topMargin = ctx.dp(12) })
+
+        addView(header("EVERYTHING IT HEARD"))
+        val heard = LinearLayout(ctx).apply { orientation = HORIZONTAL }
+        r.timeline.filter { it.duration >= 0.4 && it.chord != null }.forEachIndexed { i, s ->
+            val ch = s.chord!!
+            val v = ctx.text(Music.chordName(ch, r.key), 15f, C.INK, true).apply {
+                setPadding(ctx.dp(10), ctx.dp(6), ctx.dp(10), ctx.dp(6))
+                setOnClickListener { select(ch, play = true) }
+            }
+            heardChips.add(ch to v)
+            heard.addView(v, lp(WRAP, WRAP).apply { if (i > 0) leftMargin = ctx.dp(5) })
+        }
+        addView(HorizontalScrollView(ctx).apply { isHorizontalScrollBarEnabled = false; addView(heard) }, lp(MATCH, WRAP))
+
+        setInst(inst)
+    }
+
+    private fun header(s: String) = context.text(s, 11f, C.MUTE, true).apply {
+        letterSpacing = 0.15f; setPadding(0, context.dp(16), 0, context.dp(8))
+    }
+
+    private fun tab(label: String, onClick: () -> Unit) = context.text(label, 14f, C.INK, true).apply {
+        gravity = Gravity.CENTER; setPadding(context.dp(8), context.dp(9), context.dp(8), context.dp(9))
+        setOnClickListener { onClick() }
+    }
+
+    private fun setInst(i: Instrument) {
+        inst = i
+        Prefs.setGuitar(context, i == Instrument.GUITAR)
+        for ((v, on) in listOf(pianoTab to (i == Instrument.PIANO), guitarTab to (i == Instrument.GUITAR))) {
+            v.background = if (on) context.rounded(C.AMBER, 10) else null
+            v.setTextColor(if (on) Color.parseColor("#1B1208") else C.MUTE)
+        }
+        piano.visibility = if (i == Instrument.PIANO) View.VISIBLE else View.GONE
+        guitar.visibility = if (i == Instrument.GUITAR) View.VISIBLE else View.GONE
+        selected?.let { select(it, play = false) }
+    }
+
+    private fun select(ch: Chord, play: Boolean) {
+        selected = ch
+        val notes = Synth.notesFor(ch, inst)
+        piano.set(Voicing.piano(ch), flats)
+        guitar.set(Voicing.guitar(ch), flats)
+        val names = if (flats) Music.FLAT else Music.SHARP
+        selName.text = Music.chordName(ch, r.key) + (if (r.key != null) "   " + Music.roman(ch, r.key) else "")
+        val inv = when {
+            !ch.isInversion -> "root position"
+            Music.INTERVALS[ch.quality].indexOf((ch.bass - ch.root + 12) % 12) == 1 -> "1st inversion"
+            Music.INTERVALS[ch.quality].indexOf((ch.bass - ch.root + 12) % 12) == 2 -> "2nd inversion"
+            else -> "3rd inversion"
+        }
+        selNotes.text = notes.joinToString("  ") { names[it % 12] } + "   ·   bass " + names[ch.bass] + ", " + inv
+        for ((c, v) in progChips) v.background = if (c == ch) context.rounded(C.PANEL2, 14, C.AMBER) else context.rounded(C.PANEL2, 14, C.LINE)
+        for ((c, v) in heardChips) v.background = if (c == ch) context.rounded(Color.parseColor("#3A2A17"), 10, C.AMBER) else context.rounded(C.PANEL2, 10)
+        if (play) { resetButtons(); Synth.play(listOf(ch), listOf(1.8), inst) }
+    }
+
+    private fun toggle(playProgButton: Boolean) {
+        val btn = if (playProgButton) playProg else playHeard
+        if (playingButton === btn) { Synth.stop(); resetButtons(); return }
+        resetButtons()
+        val chords: List<Chord>; val secs: List<Double>
+        if (playProgButton) {
+            chords = r.progression + r.progression
+            secs = chords.map { 1.6 }
+        } else {
+            val segs = r.timeline.filter { it.chord != null && it.duration >= 0.4 }
+            chords = segs.map { it.chord!! }
+            secs = segs.map { it.duration.coerceIn(0.6, 4.0) }
+        }
+        if (chords.isEmpty()) return
+        playingButton = btn
+        btn.text = "■  Stop"
+        Synth.play(chords, secs, inst, onChord = { i -> select(chords[i], play = false) }, onDone = {
+            if (playingButton === btn) resetButtons()
+        })
+    }
+
+    private fun resetButtons() {
+        playingButton = null
+        playProg.text = "▶  Progression"; playHeard.text = "▶  As heard"
+    }
+
+    override fun onDetachedFromWindow() {
+        if (playingButton != null) Synth.stop()
+        super.onDetachedFromWindow()
     }
 }
 

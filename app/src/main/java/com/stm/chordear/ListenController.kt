@@ -13,6 +13,8 @@ object Prefs {
     fun setPhoneAudio(ctx: Context, v: Boolean) = p(ctx).edit().putBoolean("phone", v).apply()
     fun extended(ctx: Context) = p(ctx).getBoolean("ext", false)
     fun setExtended(ctx: Context, v: Boolean) = p(ctx).edit().putBoolean("ext", v).apply()
+    fun guitar(ctx: Context) = p(ctx).getBoolean("guitar", false)
+    fun setGuitar(ctx: Context, v: Boolean) = p(ctx).edit().putBoolean("guitar", v).apply()
 }
 
 /** Runs one listening session (start -> live updates -> whole-clip analysis -> result) on the main thread. */

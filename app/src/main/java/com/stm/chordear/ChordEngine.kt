@@ -20,8 +20,13 @@ import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.sqrt
 
-/** One detected chord: root pitch class (0 = C) and quality index into [Music.SUFFIX]. */
-data class Chord(val root: Int, val quality: Int)
+/**
+ * One detected chord: root pitch class (0 = C), quality index into [Music.SUFFIX],
+ * and the bass note (equal to root unless it's an inversion, e.g. C/E).
+ */
+data class Chord(val root: Int, val quality: Int, val bass: Int = root) {
+    val isInversion get() = bass != root
+}
 
 /** Where the audio comes from. */
 object AudioSources {

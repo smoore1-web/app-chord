@@ -31,7 +31,7 @@ object Music {
     fun chordName(c: Chord?, key: Key?): String {
         if (c == null) return "–"
         val names = if (key?.flats == true) FLAT else SHARP
-        return names[c.root] + SUFFIX[c.quality]
+        return names[c.root] + SUFFIX[c.quality] + if (c.isInversion) "/" + names[c.bass] else ""
     }
 
     fun roman(c: Chord, key: Key): String {
@@ -40,7 +40,18 @@ object Music {
         val minorish = c.quality == 1 || c.quality == 3 || c.quality == 6
         if (minorish) r = r.replace("VII", "vii").replace("VI", "vi").replace("IV", "iv")
             .replace("V", "v").replace("III", "iii").replace("II", "ii").replace("I", "i")
-        r += when (c.quality) { 2, 3 -> "7"; 4 -> "maj7"; 5 -> "sus4"; 6 -> "°"; else -> "" }
+        val seventh = c.quality in 2..4
+        if (!c.isInversion) {
+            r += when (c.quality) { 2, 3 -> "7"; 4 -> "maj7"; 5 -> "sus4"; 6 -> "°"; else -> "" }
+        } else {
+            // figured-bass inversion symbols: V⁶ = first inversion, V⁶₄ = second, etc.
+            val iv = (c.bass - c.root + 12) % 12
+            val pos = INTERVALS[c.quality].indexOf(iv)
+            if (c.quality == 6) r += "°"
+            if (c.quality == 4) r += "maj"
+            r += if (seventh) when (pos) { 1 -> "⁶₅"; 2 -> "⁴₃"; 3 -> "⁴₂"; else -> "7" }
+                 else when (pos) { 1 -> "⁶"; 2 -> "⁶₄"; else -> "" }
+        }
         return r
     }
 

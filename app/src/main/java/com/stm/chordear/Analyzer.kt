@@ -144,7 +144,11 @@ object Analyzer {
                 if (quiet) { emit[s] = 0f; continue }
                 val v = tVec[s]; var d = 0f
                 for (i in 0 until 12) d += c[i] * v[i]
-                emit[s] = d + 0.1f * b[tChord[s].root] + tBias[s]
+                // bass on the root helps; bass on another chord tone (an inversion) shouldn't count against it
+                val ch = tChord[s]
+                var other = 0f
+                for (iv in Music.INTERVALS[ch.quality]) if (iv != 0) other = max(other, b[(ch.root + iv) % 12])
+                emit[s] = d + 0.06f * b[ch.root] + 0.035f * other + tBias[s]
             }
             emit[S - 1] = if (quiet) 1f else 0.45f
             if (t == 0) { for (s in 0 until S) prev[s] = emit[s]; continue }
@@ -183,7 +187,19 @@ object Analyzer {
             val p = fin.lastOrNull()
             if (p != null && p.chord == g.chord) p.end = g.end else fin.add(g)
         }
-        val chords = fin.filter { it.chord != null }
+        // ---- 7. inversions: which chord tone the bass actually sits on ----
+        val chords = fin.filter { it.chord != null }.map { g ->
+            val ch = g.chord!!
+            val a = (g.start / dt).toInt().coerceIn(0, T - 1)
+            val z = (g.end / dt).toInt().coerceIn(a + 1, T)
+            val sum = FloatArray(12)
+            for (t in a until z) if (levels[t] > 0.06f * maxLevel) for (i in 0 until 12) sum[i] += bass[t][i]
+            val chordTones = Music.INTERVALS[ch.quality].map { (ch.root + it) % 12 }
+            var bp = ch.root; var bv = sum[ch.root]
+            for (pc in chordTones) if (sum[pc] > bv) { bv = sum[pc]; bp = pc }
+            val inv = bp != ch.root && sum[bp] > 1.4f * sum[ch.root] && g.duration >= 0.5
+            Segment(if (inv) ch.copy(bass = bp) else ch, g.start, g.end)
+        }
         if (chords.none { it.duration >= 0.5 }) return null
         val prog = Music.mainProgression(chords)
         val finalKey = if (key != null) resolveRelative(key, chords, bassProfile, prog) else null
